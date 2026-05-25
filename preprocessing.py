@@ -1,74 +1,158 @@
 # preprocessing.py
-
 import os
+import scipy.io as sio
 import numpy as np
+from pathlib import Path
+from scipy.signal import stft
 
+def extract_de_features_2s(signal, fs=200):
+    """
+    2s Pipeline: Extract Differential Entropy (DE) features from 2-second non-overlapping windows of the raw EEG signal.
+    This function implements the core feature extraction steps as outlined in the assignment requirements.
+    It takes a raw EEG signal of shape (62, time_points) and returns a feature array of shape (N_segments, 62, 5) where N_segments is the number of 2-second windows, 62 is the number of channels, and 5 corresponds to the five frequency bands (delta, theta, alpha, beta, gamma).
+    The steps include:
+    1. Short-Time Fourier Transform (STFT) to get the time-frequency representation of the signal.
+    2. Band-specific energy calculation for the defined frequency bands.
+    3. Differential Entropy (DE) calculation for each band and channel.
+    4. Temporal smoothing using a simple moving average to approximate the effect of a Linear Dynamic System (LDS) for smoothing the features over time.
+    5. Feature normalization using Z-score normalization across the time axis for each channel and band to ensure that the features are on a comparable scale.
+    The final output is a smoothed and normalized DE feature array that can be used for training.
+    """
+    window_duration = 2  # Duration of 2s windows
+    nperseg = fs * window_duration  # Number of samples per segment (400 samples at 200 Hz)
+    
+    # 1. STFT to get time-frequency representation
+    freqs, times, Zxx = stft(signal, fs=fs, window='hann', 
+                             nperseg=nperseg, noverlap=0, axis=-1) # Use hann window, noverlap=0 for non-overlapping windows, and axis=-1 to apply STFT along the time dimension. freqs: array of sample frequencies, times: array of segment times, Zxx: STFT of the signal with shape (62, frequencies, N_segments)
+    Zxx = np.abs(Zxx) # Get the absolute value of the STFT coefficients to represent the magnitude of the frequency components
+    Zxx = np.transpose(Zxx, (2, 0, 1)) # Rearrange to (N_segments, 62, frequencies) for easier processing
+    n_segments = Zxx.shape[0] # Total number of 2-second segments extracted from the signal
+    
+    bands = {
+        'delta': (1, 3), 'theta': (4, 7), 'alpha': (8, 13), 'beta': (14, 30), 'gamma': (31, 50)
+    } # Define the frequency bands of interest for EEG analysis according to the paper
+    
+    # 2. Band-specific energy calculation and DE computation
+
+    de_features = np.zeros((n_segments, 62, 5)) # Initialize an array to hold the DE features for each segment, channel, and band. Shape: (N_segments, 62 channels, 5 bands)
+    
+    for t in range(n_segments): # Loop over each time segment
+        for b_idx, (band_name, (low, high)) in enumerate(bands.items()):
+            idx = np.where((freqs >= low) & (freqs <= high))[0]
+            band_energy = np.mean(Zxx[t][:, idx] ** 2, axis=-1) # Calculate the average energy in the current band for each channel by taking the mean of the squared magnitudes of the STFT coefficients across the frequencies that fall within the band
+            de_band = 0.5 * np.log(2 * np.pi * np.e * band_energy + 1e-8)
+            de_features[t, :, b_idx] = de_band # Store the DE features for the current band and all channels in the corresponding slice of the de_features array
+
+    # 3. Temporal smoothing using a simple moving average to approximate the effect of a Linear Dynamic System (LDS)
+    de_features_smoothed = np.zeros_like(de_features)
+    window_size = 5 
+    for c in range(62):
+        for b in range(5):
+            de_features_smoothed[:, c, b] = np.convolve(
+                de_features[:, c, b], np.ones(window_size)/window_size, mode='same'
+            )
+
+    # 4. Feature normalization using Z-score normalization across the time axis for each channel and band
+    mean = de_features_smoothed.mean(axis=0, keepdims=True)
+    std = de_features_smoothed.std(axis=0, keepdims=True)
+    de_features_smoothed = (de_features_smoothed - mean) / (std + 1e-8)
+    
+    return de_features_smoothed # Shape: (N_segments, 62, 5) - Smoothed and normalized DE features for each segment, channel, and band
 
 def preprocess_dataset(config):
     """
-    Preprocessing pipeline.
-
-    Students should:
-    - load raw data (BIDS or other format)
-    - apply filtering / normalization
-    - segment signals into (N, C, T)
-
-    Each saved file MUST contain:
-        {
-            "signals": (N, C, T),
-            "labels": (N,),
-            "subject_id": str or int
-        }
-
-    One file can represent:
-    - a run
-    - a session
-    - or any logical chunk
+    Main preprocessing function that reads raw SEED EEG data, applies the 2s feature extraction pipeline, and saves the processed features and labels in the required format.
     """
-
     raw_path = config["paths"]["raw_data"]
     save_path = config["paths"]["processed_data"]
-
+    
     os.makedirs(save_path, exist_ok=True)
-
     print("Running preprocessing...")
-
+    
     file_counter = 0
-
-    # -------------------------
-    # Example structure (BIDS-like)
-    # -------------------------
-    for subject in os.listdir(raw_path):
-
-        if not subject.startswith("sub-"):
+    FS = 200
+    
+    # SEED dataset has 15 trials per subject, and the global labels for these trials are as follows (based on the SEED paper and dataset documentation):
+    seed_global_labels = [1, 0, -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 0, 1, -1]
+    
+    # 严格按照作业要求的 BIDS-like 结构遍历
+    # 注意：SEED 的 Preprocessed_EEG 文件夹下一般直接是所有受试者的 mat 文件
+    # 如果你的 Cluster 上按 "sub-xxx" 建立了子文件夹，下面这个循环能完美适配；
+    # 如果 mat 文件直接平铺在 Preprocessed_EEG 里，它也会直接处理。
+    for file_name in sorted(os.listdir(raw_path)):
+        if not file_name.endswith(".mat") or file_name.startswith("label"):
             continue
+            
+        file_path = os.path.join(raw_path, file_name)
+        
+        # 1. 解构出 Subject ID（例如从 "10_20131130.mat" 中提取出 "10" 作为主试ID）
+        subject_id = file_name.split("_")[0]
+        
+        # 2. 【TODO: load real data here】加载真实的 SEED 脑电 mat 数据
+        mat_data = sio.loadmat(file_path)
+        
+        # 收集当前受试者所有 trial 的特征和标签，最后打包在一起
+        all_signals_list = []
+        all_labels_list = []
+        
+        # ✅ 改成：先提取并排序所有 eeg key，再按顺序遍历
+        # 1. 过滤出真正的脑电变量（跳过 __header__、__version__ 等元数据）
+        eeg_keys = [
+            k for k in mat_data.keys()
+            if not k.startswith("__") and mat_data[k].shape[0] == 62
+        ]
 
-        subject_id = subject
-        subject_path = os.path.join(raw_path, subject)
+        # 2. 按 key 里的数字排序（避免 'eeg_10' 排在 'eeg_2' 前面的字符串排序陷阱）
+        eeg_keys.sort(key=lambda k: int(''.join(c for c in k if c.isdigit())))
 
-        for root, _, files in os.walk(subject_path):
-            for file in files:
-
-                # -------------------------
-                # TODO: filter valid data files (e.g. .snirf, .edf)
-                # -------------------------
-
-                file_path = os.path.join(root, file)
-
-                # -------------------------
-                # TODO: load real data here
-                # -------------------------
-                signals = np.random.randn(50, 1, 1000)
-                labels = np.random.randint(0, 2, 50)
-
-                save_name = f"sample_{file_counter}.npy"
-
-                np.save(os.path.join(save_path, save_name), {
-                    "signals": signals,
-                    "labels": labels,
-                    "subject_id": subject_id
-                })
-
-                file_counter += 1
+        # 3. 按 trial 编号（0~14）顺序遍历
+        for trial_idx, key in enumerate(eeg_keys):
+            raw_signal = mat_data[key]  # 形状: (62, 时间点)
+            
+            # 调用 2s DE 特征提取 pipeline，返回形状 (N_segments, 62, 5)
+            trial_features_2s = extract_de_features_2s(raw_signal, fs=FS)
+            
+            n_segments = trial_features_2s.shape[0]
+            
+            # 获取当前 trial 对应的真实情绪标签
+            # +1 是为了把 -1/0/1 转成 0/1/2，方便 PyTorch CrossEntropyLoss 使用
+            current_label = seed_global_labels[trial_idx] + 1
+            trial_labels = np.full((n_segments,), current_label, dtype=np.int64)
+            
+            all_signals_list.append(trial_features_2s)
+            all_labels_list.append(trial_labels)
+        
+        # 4. 【segment signals into (N, C, T)】
+        # 把该受试者全部 15 个 trial 的 2s 切片和标签在第 0 维(N)拼接在一起
+        if len(all_signals_list) > 0:
+            final_signals = np.concatenate(all_signals_list, axis=0)  # 形状: (总切片数 N, 62, 5)
+            final_labels = np.concatenate(all_labels_list, axis=0)    # 形状: (总切片数 N,)
+            
+            # 5. 【Each saved file MUST contain the required dict structure】
+            save_dict = {
+                "signals": final_signals,        # 维度: (N, C, T)
+                "labels": final_labels,          # 维度: (N,)
+                "subject_id": str(subject_id)    # 受试者编号
+            }
+            
+            # 保存为作业要求的 .npy 文件
+            save_name = f"sample_{file_counter}.npy"
+            np.save(os.path.join(save_path, save_name), save_dict)
+            
+            print(f" Saved {save_name} for subject {subject_id}: signals shape={final_signals.shape}, labels shape={final_labels.shape}")
+            file_counter += 1
 
     print("Preprocessing complete.")
+
+# ==========================================
+# 模拟在 Cluster 上的执行方式
+# ==========================================
+if __name__ == "__main__":
+    # 配置你的集群真实路径
+    config = {
+        "paths": {
+            "raw_data": "/home/space/datasets/bsa03/SEED/Preprocessed_EEG",
+            "processed_data": "/home/space/datasets/bsa03/SEED/My_Processed_Project_Data"
+        }
+    }
+    preprocess_dataset(config)
