@@ -45,11 +45,11 @@ def extract_de_features_2s(signal, fs=200):
 
     # 3. Temporal smoothing using a simple moving average to approximate the effect of a Linear Dynamic System (LDS)
     de_features_smoothed = np.zeros_like(de_features)
-    window_size = 5 
-    for c in range(62):
-        for b in range(5):
-            de_features_smoothed[:, c, b] = np.convolve(
-                de_features[:, c, b], np.ones(window_size)/window_size, mode='same'
+    window_size = 5 # Use a window size of 5 segments(10 seconds) for smoothing. Helps to capture more stable feature representations over time while still allowing temporal dynamics.
+    for c in range(62): # Loop over each channel
+        for b in range(5): # Loop over each band
+            de_features_smoothed[:, c, b] = np.convolve( 
+                de_features[:, c, b], np.ones(window_size)/window_size, mode='same' # "same" mode to keep the output the same length as the input. 
             )
 
     # 4. Feature normalization using Z-score normalization across the time axis for each channel and band
@@ -69,9 +69,9 @@ def preprocess_dataset(config):
     os.makedirs(save_path, exist_ok=True)
     print("Running preprocessing...")
     
-    file_counter = 0
-    FS = 200
-    
+    file_counter = 0 # Counter to keep track of the number of processed files for naming the output .npy files sequentially (e.g., sample_0.npy, sample_1.npy, etc.)
+    FS = 200 # Predefined sampling frequency of the SEED dataset
+
     # SEED dataset has 15 trials per subject, and the global labels for these trials are as follows (based on the SEED paper and dataset documentation):
     seed_global_labels = [1, 0, -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 0, 1, -1]
     
