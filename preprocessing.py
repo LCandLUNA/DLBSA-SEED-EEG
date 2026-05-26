@@ -5,11 +5,12 @@ import numpy as np
 from pathlib import Path
 from scipy.signal import stft
 
-def extract_de_features_2s(signal, fs=200):
+def extract_de_features_4s(signal, fs=200):
     """
-    2s Pipeline: Extract Differential Entropy (DE) features from 2-second non-overlapping windows of the raw EEG signal.
+    4s Pipeline: Extract Differential Entropy (DE) features from 4-second non-overlapping windows of the raw EEG signal.
     This function implements the core feature extraction steps as outlined in the assignment requirements.
-    It takes a raw EEG signal of shape (62, time_points) and returns a feature array of shape (N_segments, 62, 5) where N_segments is the number of 2-second windows, 62 is the number of channels, and 5 corresponds to the five frequency bands (delta, theta, alpha, beta, gamma).
+    It takes a raw EEG signal of shape (62, time_points) and returns a feature array of shape (N_segments, 62, 5) where N_segments is the number of 4-second windows, 62 is the number of channels, and 5 corresponds to the five frequency bands (delta, theta, alpha, beta, gamma).
+    N_segments = total_time_points / (fs * window_duration) = total_time_points / 800 for 4-second windows at 200 Hz sampling rate.   
     The steps include:
     1. Short-Time Fourier Transform (STFT) to get the time-frequency representation of the signal.
     2. Band-specific energy calculation for the defined frequency bands.
@@ -18,8 +19,8 @@ def extract_de_features_2s(signal, fs=200):
     5. Feature normalization using Z-score normalization across the time axis for each channel and band to ensure that the features are on a comparable scale.
     The final output is a smoothed and normalized DE feature array that can be used for training.
     """
-    window_duration = 2  # Duration of 2s windows
-    nperseg = fs * window_duration  # Number of samples per segment (400 samples at 200 Hz)
+    window_duration = 4  # Duration of 4s windows
+    nperseg = fs * window_duration  # Number of samples per segment (800 samples at 200 Hz)
     
     # 1. STFT to get time-frequency representation
     freqs, times, Zxx = stft(signal, fs=fs, window='hann', 
@@ -44,8 +45,8 @@ def extract_de_features_2s(signal, fs=200):
             de_features[t, :, b_idx] = de_band # Store the DE features for the current band and all channels in the corresponding slice of the de_features array
 
     # 3. Temporal smoothing using a simple moving average to approximate the effect of a Linear Dynamic System (LDS)
-    de_features_smoothed = np.zeros_like(de_features)
-    window_size = 5 # Use a window size of 5 segments(10 seconds) for smoothing. Helps to capture more stable feature representations over time while still allowing temporal dynamics.
+    de_features_smoothed = np.zeros_like(de_features) # Initialize an array to hold the smoothed DE features. Shape: (N_segments, 62 channels, 5 bands)
+    window_size = 5 # Use a window size of 5 segments for smoothing.
     for c in range(62): # Loop over each channel
         for b in range(5): # Loop over each band
             de_features_smoothed[:, c, b] = np.convolve( 
@@ -61,23 +62,23 @@ def extract_de_features_2s(signal, fs=200):
 
 def preprocess_dataset(config):
     """
-    Main preprocessing function that reads raw SEED EEG data, applies the 2s feature extraction pipeline, and saves the processed features and labels in the required format.
+    Main preprocessing function that reads raw SEED EEG data, applies the 4s feature extraction pipeline, and saves the processed features and labels in the required format.
     """
     raw_path = config["paths"]["raw_data"]
     save_path = config["paths"]["processed_data"]
     
-    os.makedirs(save_path, exist_ok=True)
-    print("Running preprocessing...")
+    os.makedirs(save_path, exist_ok=True) # Ensure the output directory exists, if not, create it. 
+    print("Running preprocessing...") 
     
     file_counter = 0 # Counter to keep track of the number of processed files for naming the output .npy files sequentially (e.g., sample_0.npy, sample_1.npy, etc.)
-    FS = 200 # Predefined sampling frequency of the SEED dataset
+    FS = 200 # Predefined sampling frequency of the SEED dataset based on the dataset documentation
 
     # SEED dataset has 15 trials per subject, and the global labels for these trials are as follows (based on the SEED paper and dataset documentation):
     seed_global_labels = [1, 0, -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 0, 1, -1]
     
 
-    for file_name in sorted(os.listdir(raw_path)):
-        if not file_name.endswith(".mat") or file_name.startswith("label"):
+    for file_name in sorted(os.listdir(raw_path)): # Loop through each file in the raw data directory, sorted alphabetically to ensure consistent processing order
+        if not file_name.endswith(".mat") or file_name.startswith("label"): # Left out label and readme files, only process .mat files
             continue
             
         file_path = os.path.join(raw_path, file_name)
@@ -92,10 +93,10 @@ def preprocess_dataset(config):
         all_signals_list = []
         all_labels_list = []
         
-        # 4. Filter out keys that correspond to EEG data (those that have shape (62, time_points)) and sort them by the trial number embedded in the key name (e.g., "eeg_1", "eeg_2", ..., "eeg_15")
+        # 4. Filter out keys that correspond to EEG data 
         eeg_keys = [
             k for k in mat_data.keys()
-            if not k.startswith("__") and mat_data[k].shape[0] == 62
+            if not k.startswith("__") and mat_data[k].shape[0] == 62 # Filter keys that do not start with "__" (to exclude metadata such as "__header__", "__version__", etc.) and have a shape where the first dimension is 62 (indicating they are EEG data with 62 channels)
         ]
 
         # Sort the EEG keys based on the trial number extracted from the key name to ensure we process trials in the correct order (0 to 14)
@@ -105,17 +106,17 @@ def preprocess_dataset(config):
         for trial_idx, key in enumerate(eeg_keys):
             raw_signal = mat_data[key]  # Shape: (62, time_points) - Raw EEG signal for the current trial
             
-            # Apply the 2s DE feature extraction pipeline to the raw signal of the current trial, which returns an array of shape (N_segments, 62, 5) containing the smoothed and normalized DE features for each 2-second segment
-            trial_features_2s = extract_de_features_2s(raw_signal, fs=FS)
+            # Apply the 4s DE feature extraction pipeline to the raw signal of the current trial, which returns an array of shape (N_segments, 62, 5) containing the smoothed and normalized DE features for each 4-second segment
+            trial_features_4s = extract_de_features_4s(raw_signal, fs=FS)
             
-            n_segments = trial_features_2s.shape[0]
+            n_segments = trial_features_4s.shape[0] # Number of 4-second segments extracted from the current trial's raw signal
             
             # Assign the global label for the current trial to all its segments. The global label is determined by the trial index and the predefined seed_global_labels list. We add +1 to convert the original labels from (-1, 0, 1) to (0, 1, 2) for compatibility with PyTorch's CrossEntropyLoss, which expects class indices starting from 0.
             # +1 is added to convert original labels from (-1, 0, 1) to (0, 1, 2) for compatibility with PyTorch's CrossEntropyLoss which expects class indices starting from 0.
             current_label = seed_global_labels[trial_idx] + 1
             trial_labels = np.full((n_segments,), current_label, dtype=np.int64)
             
-            all_signals_list.append(trial_features_2s)
+            all_signals_list.append(trial_features_4s)
             all_labels_list.append(trial_labels)
         
         # After processing all trials for the current subject, concatenate the features and labels from all trials to create a single array of features and a corresponding array of labels for the entire subject. This will allow us to save one file per subject containing all their processed data.
@@ -139,15 +140,18 @@ def preprocess_dataset(config):
 
     print("Preprocessing complete.")
 
-# ==========================================
-# Monitoring code to run the preprocessing when this script is executed directly. It sets up the configuration with the paths to the raw data and the directory where the processed data should be saved, and then calls the preprocess_dataset function with this configuration.
-# ==========================================
+
+def extract_de_features_2s(signal, fs=200):
+    """Backward-compatible alias for the 4-second DE feature extractor."""
+    return extract_de_features_4s(signal, fs=fs)
+
+
 if __name__ == "__main__":
 
     config = {
         "paths": {
             "raw_data": "/home/space/datasets/bsa03/SEED/Preprocessed_EEG",
-            "processed_data": "/home/space/datasets/bsa03/SEED/My_Processed_Project_Data"
+            "processed_data": "/home/bsa03/processed_seed_4s"
         }
     }
     preprocess_dataset(config)
