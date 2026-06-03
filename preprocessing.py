@@ -141,11 +141,6 @@ def preprocess_dataset(config):
     print("Preprocessing complete.")
 
 
-def extract_de_features_2s(signal, fs=200):
-    """Backward-compatible alias for the 4-second DE feature extractor."""
-    return extract_de_features_4s(signal, fs=fs)
-
-
 if __name__ == "__main__":
 
     config = {
