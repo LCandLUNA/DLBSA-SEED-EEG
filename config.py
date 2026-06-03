@@ -3,8 +3,8 @@
 def get_config():
     config = {
         "paths": {
-            "raw_data": "./data/raw/",
-            "processed_data": "./data/processed/",
+            "raw_data": "/home/space/datasets/bsa03/SEED/Preprocessed_EEG",
+            "processed_data": "/home/bsa03/processed_seed_4s",
             "outputs": "./outputs/",
             "checkpoints": "./outputs/checkpoints/",
             "results": "./outputs/results/",
@@ -12,10 +12,10 @@ def get_config():
         },
 
         "dataset": {
-            "name": "example",
-            "input_channels": 1,
-            "segment_length": 1000,
-            "num_classes": 2,
+            "name": "SEED",
+            "input_channels": 62,    # 62channels
+            "segment_length": 5,     # 5 frequency bands
+            "num_classes": 3, 
         },
 
         "training": {
