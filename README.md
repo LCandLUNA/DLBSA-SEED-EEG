@@ -1,26 +1,46 @@
-# DL-BSA Project – Starter Template
+# DL-BSA Project – SEED EEG Emotion Recognition 
 
-This repository provides a **minimal starting point** for the Deep Learning for Biosignal Analysis (DL-BSA) project. It is intentionally simple and is meant to be **modified and extended**.
+This project explores EEG-based emotion recognition using the SEED dataset. The goal is to classify emotional states into three categories:
+- Positive
+- Neutral
+- Negative
 
 ---
 
-## General Note
+## Project Pipeline
 
-This is **not a fixed framework**.
-
-You are expected to:
-- modify any script  
-- add or remove components  
-- adapt the pipeline to your dataset and task  
-
-The template only defines a **basic structure**.
+```text
+Dataset
+(SEED)
+    ↓
+Preprocessing
+(STFT + DE Features)
+    ↓
+Feature Dataset
+(.npy files)
+    ↓
+Model Training
+(CNN / MLP / TBD)
+    ↓
+Emotion Classification
+(Positive / Neutral / Negative)
+    ↓
+Evaluation
+(LOSO / LMSO)
+```
 
 ---
 
 ## Workflow
 
 1. `preprocessing.py`  
-   Load raw data (e.g., BIDS), clean and segment signals, and save processed data.
+   Generate Differential Entropy (DE) features from SEED EEG recordings.
+   Current preprocessing steps:
+   - Short-Time Fourier Transform (STFT)
+   - Frequency band decomposition
+   - Differential Entropy (DE) feature extraction
+   - Temporal smoothing
+   - Z-score normalization
 
 2. `dataset.py`  
    Load processed data and return samples.
@@ -39,37 +59,68 @@ python main.py
 
 ---
 
-## Processed Data Format
+## Dataset
 
-Each saved file must contain:
+**Dataset:** SEED (SJTU Emotion EEG Dataset)
 
-```python
-{
-    "signals": (N, C, T),
-    "labels": (N,),
-    "subject_id": identifier
-}
-```
+- 15 subjects
+- 45 recording sessions
+- 62 EEG channels
+- Sampling rate: 200 Hz
+- 3 emotion classes
 
-- One file can correspond to a run, session, or any logical unit.  
-- Multiple files per subject are allowed.  
-- File naming is not restricted.
+### Label Mapping
+
+| Emotion | Label |
+|----------|--------|
+| Negative | 0 |
+| Neutral | 1 |
+| Positive | 2 |
+
+The project uses the official `Preprocessed_EEG` release of the SEED dataset.
 
 ---
 
-## Dimensions
+## Preprocessing
 
-The template assumes input shape:
+The preprocessing pipeline includes:
+
+- Short-Time Fourier Transform (STFT)
+- Five-band frequency decomposition
+  - Delta (1–3 Hz)
+  - Theta (4–7 Hz)
+  - Alpha (8–13 Hz)
+  - Beta (14–30 Hz)
+  - Gamma (31–50 Hz)
+- Differential Entropy (DE) feature extraction
+- Moving-average temporal smoothing
+- Z-score normalization
+
+---
+
+## Output Format
+
+Each processed sample is stored as:
 
 ```python
-(B, C, T)
+{
+    "signals": ndarray,
+    "labels": ndarray,
+    "subject_id": str
+}
 ```
 
-However, depending on your preprocessing and model, this can change.
+Feature shape:
 
-You are responsible for ensuring:
-- consistency between preprocessing, dataset, and model  
-- correct input/output dimensions throughout the pipeline  
+```python
+signals.shape = (N, 62, 5)
+```
+
+where:
+
+- `N` = number of EEG segments
+- `62` = EEG channels
+- `5` = frequency bands
 
 ---
 
@@ -101,12 +152,11 @@ If your task is different (e.g., regression or segmentation), you must modify:
 Supported protocols:
 - LOSO (Leave-One-Subject-Out)  
 - LMSO (Leave-Multiple-Subjects-Out)  
-- K-Fold (sample-level)  
 
 Subject-based splits are recommended for biomedical data.
 
 ---
 
-## Final Remark
+## References
 
-This template is only a starting point.
+- W.-L. Zheng and B.-L. Lu, “Investigating critical frequency bands and channels for eeg-based emo tion recognition with deep neural networks”, IEEE Transactions on Autonomous Mental Development, vol. 7, no. 3, pp. 16
