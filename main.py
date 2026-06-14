@@ -8,10 +8,7 @@ from utils import create_folders
 
 def main():
     config = get_config()
-
     create_folders(config)
-
-    preprocess_dataset(config)
     run_experiment(config)
 
 

@@ -4,16 +4,13 @@ import torch
 import torch.nn as nn
 
 
-class Model(nn.Module):
+class CNNModel(nn.Module):
     """
-    Empty model template.
+    2D CNN for EEG-based emotion recognition using DE features.
+    DE matrix shape: (62, 5 ) where 62 is the number of channels and 5 is frequency bands (delta, theta, alpha, beta, gamma).
 
-    You must:
-    - define layers in __init__
-    - implement forward pass
-
-    Input shape:  (B, C, T)
-    Output shape: (B, num_classes) for classification
+    Input shape:  (batch_size, 1, 62, 5) 
+    Output shape: (batch_size, num_classes) where num_classes=3 for positive, neutral, negative)
     """
 
     def __init__(self, config):
@@ -21,31 +18,50 @@ class Model(nn.Module):
 
         self.config = config
 
-        in_channels = config["dataset"]["input_channels"]
-        num_classes = config["dataset"]["num_classes"]
+        in_channels = config["dataset"]["conv_in_channels"] # 1 channel for Conv2d
+        num_classes = config["dataset"]["num_classes"] # 3 classes
 
-        # -------------------------
-        # TODO: Define your layers here
-        # Example:
-        # self.conv1 = nn.Conv1d(in_channels, 16, kernel_size=3)
-        # self.fc = nn.Linear(..., num_classes)
-        # -------------------------
-
-        pass
+        # Convolutional layers for feature extraction
+        self.conv_layers = nn.Sequential(
+            # block 1 for extracting lower-level features 1 ->32
+            nn.Conv2d(in_channels, 32, kernel_size=(3, 3), padding=1), # choosing kernel size of (3, 3) to capture 2d spatial patterns based on the size of the input DE matrix (62, 5)
+            nn.BatchNorm2d(32), # batch normalization after convolutional layer to stabilize training and improve convergence
+            nn.ReLU(),
+            
+            # block 2 for extracting higher-level features 32 -> 64
+            nn.Conv2d(32, 64, kernel_size=(3, 3), padding=1), # same kernel size for second conv layer to further capture spatial patterns while maintaining the spatial dimensions of the feature maps
+            nn.BatchNorm2d(64),
+            nn.ReLU(),  # ouput shape after conv layers: (batch_size, 64, 62, 5)
+        )
+        
+        # Fully connected layer for classification
+        self.fc_layers =nn.Sequential(
+            nn.Linear(64 * 62 * 5, 128), # forward pass will flatten the feature maps from conv layers (64 channels, 62 height, 5 width) into a single vector of size 64*62*5=19840 for each sample, and then pass through a fully connected layer to reduce dimensionality to 128, I chose 128 as a common hidden layer size that balances model capacity and computational efficiency
+            nn.ReLU(),
+            nn.Dropout(0.5), # dropout rate of 0.5 to prevent overfitting by randomly setting half of the activations to zero during training, which encourages the model to learn more robust features that generalize better to unseen data
+            nn.Linear(128, num_classes) # every batch will ouput a 128-dimensional feature vector with 3 output values corresponding to the 3 classes (positive, neutral, negative)
+        )
 
     def forward(self, x):
         """
         Forward pass
 
-        x: (B, C, T)
+        x: (batch_size, 1, 62, 5) input DE matrix with 1 channel(DE feature), 62 channels, and 5 frequency bands
         """
 
-        # -------------------------
-        # TODO: Implement forward pass
-        # Example:
-        # x = self.conv1(x)
-        # x = ...
-        # return x
-        # -------------------------
+        assert x.ndim == 4, f"Expected input shape (B, 1, 62, 5), got {x.shape}" # sanity check for input shape
+        x = self.conv_layers(x) # pass input through convolutional layers, output shape: (batch_size, 64, 62, 5)
+        x = x.view(x.size(0), -1) # flatten the feature maps into a single vector for each sample, output shape: (batch_size, 64*62*5)
+        x = self.fc_layers(x) # pass through fully connected layers for classification, output shape: (batch_size, num_classes)
+        return x
+    
 
-        raise NotImplementedError("You must implement the forward pass.")
+# get model function to initialize the model based on config    
+def get_model(config):
+    model_type = config["model"]["type"]
+    if model_type == "cnn":
+        return CNNModel(config)
+    else:
+        raise NotImplementedError(f"Unknown model type: {model_type}")
+
+    
