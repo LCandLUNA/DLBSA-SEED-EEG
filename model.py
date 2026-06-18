@@ -3,7 +3,6 @@
 import torch
 import torch.nn as nn
 
-
 class CNNModel(nn.Module):
     """
     2D CNN for EEG-based emotion recognition using DE features.
@@ -20,6 +19,8 @@ class CNNModel(nn.Module):
 
         in_channels = config["dataset"]["conv_in_channels"] # 1 channel for Conv2d
         num_classes = config["dataset"]["num_classes"] # 3 classes
+        eeg_channels = config["dataset"]["eeg_channels"]
+        freq_bands = config["dataset"]["freq_bands"]
 
         # Convolutional layers for feature extraction
         self.conv_layers = nn.Sequential(
@@ -56,12 +57,56 @@ class CNNModel(nn.Module):
         return x
     
 
+class MLPClassifier(nn.Module):
+    """
+    MLP baseline for EEG emotion classification.
+
+    Input shape:
+        (B, 62, 5)
+
+    Processing:
+        Flatten (62 * 5 = 310)
+        Fully connected layers
+
+    Output shape:
+        (B, 3)
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        input_dim = (
+            config["dataset"]["eeg_channels"]
+            *
+            config["dataset"]["freq_bands"]
+        )
+
+        num_classes = config["dataset"]["num_classes"]
+
+        self.net = nn.Sequential(
+            nn.Flatten(),
+
+            nn.Linear(input_dim, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+
+            nn.Linear(128, num_classes)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
 # get model function to initialize the model based on config    
 def get_model(config):
     model_type = config["model"]["type"]
     if model_type == "cnn":
         return CNNModel(config)
+    if model_type == "mlp":
+        return MLPClassifier(config)
     else:
         raise NotImplementedError(f"Unknown model type: {model_type}")
-
-    
