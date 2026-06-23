@@ -3,6 +3,7 @@
 import os
 import json
 import torch
+import copy
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
 
@@ -13,7 +14,8 @@ from utils import (
     loso_split,
     lmso_split,
     kfold_split_indices,
-    check_no_leakage
+    check_no_leakage,
+    subject_dependent_splits
 )
 
 # -------------------------
@@ -68,10 +70,16 @@ def evaluate(model, loader, device):
 
 def save_results(results, config):
     model_type = config["model"]["type"]
-    filename = f"{model_type}_results.json" # distinguish results by model type 
+    protocol = config["evaluation"]["protocol"] # get model type and evaluation protocol from config to distinguish results
+    filename = f"{model_type}_{protocol}_results.json" # distinguish results by model type 
     path = os.path.join(config["paths"]["results"], filename)
     with open(path, "w") as f:
-        json.dump({"results": results}, f, indent=4)
+        json.dump({
+            "model": model_type,
+            "protocol": protocol,
+            "results": results,
+            "mean_accuracy": sum(results) / len(results)
+            }, f, indent=4)
 
 
 # -------------------------
@@ -84,6 +92,7 @@ def save_results(results, config):
 def run_experiment(config):
     device = config["training"]["device"]
     protocol = config["evaluation"]["protocol"]
+    model_type = config["model"]["type"]
 
     results = []
 
@@ -103,6 +112,9 @@ def run_experiment(config):
     elif protocol == "kfold":
         full_dataset = BiosignalDataset(config, subject_ids=None)
         splits = kfold_split_indices(len(full_dataset), config["evaluation"]["num_folds"])
+    
+    elif protocol == "subject_dependent":
+        splits = subject_dependent_splits(config["paths"]["processed_data"])
 
     else:
         raise ValueError("Unknown evaluation protocol")
@@ -120,17 +132,29 @@ def run_experiment(config):
 
         if protocol in ["loso", "lmso"]:
             train_sids, test_sids = split
-
             check_no_leakage(train_sids, test_sids)
-
             train_dataset_raw = BiosignalDataset(config, train_sids)
-            mean, std = train_dataset_raw.compute_stats() # compute stats from training dataset for normalization, to avoid data leakage from test set
+            print(f"train_dataset_raw size: {len(train_dataset_raw)}")
+            mean, std = train_dataset_raw.compute_stats()
+            train_dataset = BiosignalDataset(config, train_sids, mean=mean, std=std)
+            test_dataset = BiosignalDataset(config, test_sids, mean=mean, std=std)
+        
+        elif protocol == "subject_dependent":
+            train_sids, test_sids = split  # get train and test subject ids from the split
+            train_dataset_raw = BiosignalDataset(config, train_sids)
+            mean, std = train_dataset_raw.compute_stats()
+            full_dataset = BiosignalDataset(config, train_sids, mean=mean, std=std)
+            # 8:2 split of the full dataset for training and testing
+            total = len(full_dataset)
+            train_size = int(0.8 * total)
+            test_size = total - train_size
+            train_dataset, test_dataset = torch.utils.data.random_split(
+                full_dataset, [train_size, test_size]
+            )
 
-            train_dataset = BiosignalDataset(config, train_sids, mean=mean, std=std) # normalize training dataset using its own stats
-            test_dataset = BiosignalDataset(config, test_sids, mean=mean, std=std) # normalize test dataset using training stats to avoid data leakage
-            
 
-        else:  # if not loso or lmso, then it's kfold
+
+        else:  # then it's kfold
             full_dataset_raw = BiosignalDataset(config, subject_ids=None)() 
 
             train_idx, test_idx = split
@@ -177,23 +201,38 @@ def run_experiment(config):
         # -------------------------
         # Training
         # -------------------------
+        best_acc = 0
+        best_state = None
+        patience = 10 # set patience for early stopping
+        no_improve = 0 # counter to track number of epochs without improvement in test accuracy
 
         for epoch in range(config["training"]["epochs"]): # loop through epochs defined in config
             loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-            acc = evaluate(model, test_loader, device)
+            train_acc = evaluate(model, train_loader, device)
+            test_acc = evaluate(model, test_loader, device)
 
-            print(f"Epoch {epoch+1}: Loss={loss:.4f}, Acc={acc:.4f}")
+            print(f"Epoch {epoch+1}: Loss={loss:.4f}, Train Acc={train_acc:.4f}, Test Acc={test_acc:.4f}")
 
+            if test_acc > best_acc: # if current test accuracy is better than the best accuracy seen so far, update best accuracy and save the model checkpoint for this fold
+                best_acc = test_acc
+                best_state = copy.deepcopy(model.state_dict())
+                no_improve = 0 # if there is improvement, reset the no_improve counter
+            else: 
+                no_improve += 1 # if there is no improvement, add 1 to the no_improve counter
+
+            if no_improve >= patience:
+                print(f"Early stopping at epoch {epoch+1}")
+                break
         # -------------------------
         # Save checkpoint
         # -------------------------
 
         torch.save(
-            model.state_dict(),
-            os.path.join(config["paths"]["checkpoints"], f"model_fold{fold}.pt")
+            best_state,
+            os.path.join(config["paths"]["checkpoints"], f"{model_type}_{protocol}_fold{fold}.pt")
         )
 
-        results.append(acc)
+        results.append(best_acc)
 
     print("\nFinal Results:", results)
     print("Mean Accuracy:", sum(results) / len(results))

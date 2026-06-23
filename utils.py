@@ -29,6 +29,44 @@ def get_subject_ids(data_path):
 # Splitting strategies
 # -------------------------
 
+def get_session_files_by_subject(data_path):
+    """
+    Load processed_data, categorize files by subject_id
+    returns a dict: {subject_id: [file1, file2, file3]} because for each subject(person), there are 3 sessions(files)
+    """
+    from collections import defaultdict
+    
+    subject_sessions = defaultdict(list)
+    
+    for file in sorted(os.listdir(data_path)):
+        if not file.endswith(".npy"):
+            continue
+        data = np.load(os.path.join(data_path, file), allow_pickle=True).item()
+        subj = str(data["subject_id"])
+        sid = file.replace(".npy", "")
+        subject_sessions[subj].append(sid)
+    
+    for subj in subject_sessions:
+        subject_sessions[subj] = sorted(
+            subject_sessions[subj],
+            key=lambda x: int(x.replace("sample_", ""))
+        )
+    
+    return dict(subject_sessions)
+    
+def subject_dependent_splits(data_path):
+    subject_sessions = get_session_files_by_subject(data_path)
+    
+    splits = []
+    for subj in sorted(subject_sessions.keys()):
+        splits.append(([str(subj)], [str(subj)]))  # str而不是int
+    
+    return splits
+
+
+
+
+
 def loso_split(subject_ids):
     """
     Leave-One-Subject-Out

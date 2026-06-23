@@ -34,7 +34,7 @@ def get_config():
         },
 
         "evaluation": {
-            "protocol": "loso",  # "loso" or "kfold"
+            "protocol": "subject_dependent",  # options: "loso", "lmso", "kfold", "subject_dependent"
             "num_folds": 5
         }
     }
