@@ -3,9 +3,15 @@
 def get_config():
     config = {
         "raw_data": "/home/space/datasets/bsa03/SEED/Preprocessed_EEG",
+        
+        # "de": use DE features(preprocessing.py)
+        # "raw": use raw EEG signals(preprocessing_raw.py)
+
+        "mode": "de", # options: "de", "raw"
 
         "paths": {
-            "processed_data": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_seed_4s",
+            "de": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_seed_4s", # when use DE features for training, this is the path to the processed DE features
+            "raw": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_raw_data", # when use raw EEG signals for training, this is the path to the processed raw EEG signals
 
             "outputs": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/",
             "checkpoints": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/checkpoints/",
@@ -19,7 +25,8 @@ def get_config():
             "freq_bands": 5,     # 5 frequency bands
             "conv_in_channels": 1, # in_channels for Conv2d(number of feature types/DE features)
             "num_classes": 3, 
-            "input_channels":1
+            "input_channels":1,
+            "window_size": 800, # 4s * 200Hz = 800 samples
         },
 
         "model": {

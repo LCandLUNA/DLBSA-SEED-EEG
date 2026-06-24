@@ -103,7 +103,7 @@ def run_experiment(config):
     # -------------------------
 
     if protocol in ["loso", "lmso"]:
-        subject_ids = get_subject_ids(config["paths"]["processed_data"])
+        subject_ids = get_subject_ids(config["paths"][config["mode"]]) # get subject ids from the processed data directory based on the mode (de or raw) defined in config
 
         if protocol == "loso":
             splits = loso_split(subject_ids)
@@ -116,7 +116,7 @@ def run_experiment(config):
         splits = kfold_split_indices(len(full_dataset), config["evaluation"]["num_folds"])
     
     elif protocol == "subject_dependent":
-        splits = subject_dependent_splits(config["paths"]["processed_data"])
+        splits = subject_dependent_splits(config["paths"][config["mode"]])
 
     else:
         raise ValueError("Unknown evaluation protocol")

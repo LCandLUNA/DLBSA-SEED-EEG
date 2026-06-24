@@ -64,7 +64,7 @@ def preprocess_dataset(config):
     """
     Main preprocessing function that reads raw SEED EEG data, applies the 4s feature extraction pipeline, and saves the processed features and labels in the required format.
     """
-    raw_path = config["paths"]["raw_data"]
+    raw_path = config["raw_data"]
     save_path = config["paths"]["processed_data"]
     
     os.makedirs(save_path, exist_ok=True) # Ensure the output directory exists, if not, create it. 
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     config = {
         "paths": {
             "raw_data": "/home/space/datasets/bsa03/SEED/Preprocessed_EEG",
-            "processed_data": "/home/bsa03/processed_seed_4s"
+            "processed_data": "/home/cliu/processed_seed_4s"
         }
     }
     preprocess_dataset(config)
