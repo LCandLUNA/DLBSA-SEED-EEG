@@ -100,6 +100,48 @@ class MLPClassifier(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+class MLPPlusClassifier(nn.Module):
+    """
+    Improved MLP for EEG emotion classification. Compared with the basic MLP, this version adds:
+    - BatchNorm1d to stabilize hidden activations
+    - Moderate Dropout for regularization
+    - Intended to be trained with AdamW + weight decay
+
+    Input shape:
+        (B, 62, 5)
+
+    Output shape:
+        (B, 3)
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        input_dim = (
+            config["dataset"]["eeg_channels"]
+            * config["dataset"]["freq_bands"]
+        )
+        num_classes = config["dataset"]["num_classes"]
+
+        self.net = nn.Sequential(
+            nn.Flatten(),
+
+            nn.Linear(input_dim, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+
+            nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+
+            nn.Linear(128, num_classes)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
 
 # get model function to initialize the model based on config    
 def get_model(config):
@@ -107,6 +149,8 @@ def get_model(config):
     if model_type == "cnn":
         return CNNModel(config)
     if model_type == "mlp":
+        return MLPClassifier(config)
+    if model_type == "mlp_plus":
         return MLPClassifier(config)
     else:
         raise NotImplementedError(f"Unknown model type: {model_type}")

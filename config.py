@@ -30,6 +30,8 @@ def get_config():
             "batch_size": 32,
             "epochs": 80,
             "learning_rate": 1e-3,
+            "optimizer": "adamw",  # optimizer change
+            "weight_decay": 1e-4,
             "device": "cuda"  # change to "cpu" if needed
         },
 

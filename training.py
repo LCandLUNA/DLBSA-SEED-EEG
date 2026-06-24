@@ -191,10 +191,17 @@ def run_experiment(config):
 
         model = get_model(config).to(device) # initialize model based on config, and move to device (GPU or CPU)
 
-        optimizer = torch.optim.Adam( # define optimizer for training, using Adam which is a popular choice for deep learning models due to its adaptive learning rate capabilities, and pass model parameters and learning rate from config    
-            model.parameters(),
-            lr=config["training"]["learning_rate"]
-        )
+        if config["training"].get("optimizer", "adam") == "adamw":
+            optimizer = torch.optim.AdamW(
+                model.parameters(),
+                lr=config["training"]["learning_rate"],
+                weight_decay=config["training"].get("weight_decay", 1e-4)
+            )
+        else:
+            optimizer = torch.optim.Adam( # define optimizer for training, using Adam which is a popular choice for deep learning models due to its adaptive learning rate capabilities, and pass model parameters and learning rate from config    
+                model.parameters(),
+                lr=config["training"]["learning_rate"]
+            )
 
         criterion = nn.CrossEntropyLoss() # define loss function for multi-class classification, which is appropriate for our 3-class
 
