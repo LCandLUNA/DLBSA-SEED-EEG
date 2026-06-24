@@ -23,7 +23,7 @@ def get_config():
         },
 
         "model": {
-            "type": "mlp"      # model change
+            "type": "mlp_plus"      # model change
         },
 
         "training": {
@@ -36,7 +36,7 @@ def get_config():
         },
 
         "evaluation": {
-            "protocol": "subject_dependent",  # options: "loso", "lmso", "kfold", "subject_dependent"
+            "protocol": "loso",  # options: "loso", "lmso", "kfold", "subject_dependent"
             "num_folds": 5
         }
     }

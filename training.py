@@ -5,6 +5,7 @@ import json
 import torch
 import copy
 import torch.nn as nn
+import statistics
 from torch.utils.data import DataLoader, Subset
 
 from dataset import BiosignalDataset
@@ -78,7 +79,8 @@ def save_results(results, config):
             "model": model_type,
             "protocol": protocol,
             "results": results,
-            "mean_accuracy": sum(results) / len(results)
+            "mean_accuracy": sum(results) / len(results),
+            "std_accuracy": statistics.stdev(results)
             }, f, indent=4)
 
 
