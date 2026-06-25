@@ -24,7 +24,7 @@ class BiosignalDataset(Dataset): # class inherit from torch.utils.data.Dataset
         labels_list = []
         subject_id_list = []
 
-        data_path = config["paths"]["processed_data"] # read from config
+        data_path = config["paths"][config["mode"]] # read from config
 
         for file in os.listdir(data_path): # loop through all 45 npy files 
             if not file.endswith(".npy"): # leave out non-npy files

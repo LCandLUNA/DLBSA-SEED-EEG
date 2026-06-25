@@ -147,16 +147,6 @@ class MLPPlusClassifier(nn.Module):
 def get_model(config):
     mode = config["mode"]
     model_type = config["model"]["type"]
-<<<<<<< HEAD
-    if model_type == "cnn":
-        return CNNModel(config)
-    if model_type == "mlp":
-        return MLPClassifier(config)
-    if model_type == "mlp_plus":
-        return MLPClassifier(config)
-    else:
-        raise NotImplementedError(f"Unknown model type: {model_type}")
-=======
 
     if mode =='de':
         if model_type == "cnn":
@@ -170,4 +160,3 @@ def get_model(config):
             return MLPClassifierRaw(config)
     
     raise NotImplementedError(f"Model type {model_type} for mode {mode} is not implemented.")
->>>>>>> e1f2993 (add preprocessing for raw preprocessed_data)

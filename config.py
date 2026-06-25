@@ -10,13 +10,12 @@ def get_config():
         "mode": "de", # options: "de", "raw"
 
         "paths": {
-            "de": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_seed_4s", # when use DE features for training, this is the path to the processed DE features
-            "raw": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_raw_data", # when use raw EEG signals for training, this is the path to the processed raw EEG signals
-
-            "outputs": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/",
-            "checkpoints": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/checkpoints/",
-            "results": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/results/",
-            "plots": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/plots/"
+                "de": "/home/cliu/processed_seed_4s",
+                "raw": "/home/cliu/DLBSA-SEED-EEG/processed_seed_raw",
+                "outputs":     "/home/cliu/DLBSA-SEED-EEG/outputs/",
+                "checkpoints": "/home/cliu/DLBSA-SEED-EEG/outputs/checkpoints/",
+                "results":     "/home/cliu/DLBSA-SEED-EEG/outputs/results/",
+                "plots":       "/home/cliu/DLBSA-SEED-EEG/outputs/plots/"
         },
 
         "dataset": {
@@ -30,7 +29,7 @@ def get_config():
         },
 
         "model": {
-            "type": "mlp_plus"      # model change
+            "type": "cnn"      # model change
         },
 
         "training": {
