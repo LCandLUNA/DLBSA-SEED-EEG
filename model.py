@@ -153,10 +153,14 @@ def get_model(config):
             return CNNModel(config)
         elif model_type == "mlp":
             return MLPClassifier(config)
+        elif model_type == "mlp_plus":
+            return MLPPlusClassifier(config)
     elif mode == 'raw':
         if model_type == "cnn":
             return CNNModelRaw(config)
         elif model_type == "mlp":
             return MLPClassifierRaw(config)
+        elif model_type == "mlp_plus":
+            return MLPPlusClassifier(config)
     
     raise NotImplementedError(f"Model type {model_type} for mode {mode} is not implemented.")

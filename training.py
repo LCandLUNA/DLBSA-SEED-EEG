@@ -6,8 +6,6 @@ import torch
 import copy
 import torch.nn as nn
 import statistics
-import numpy as np
-import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Subset
 
 from dataset import BiosignalDataset
@@ -52,11 +50,10 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
 # this function will be called in the training loop after each epoch to evaluate the model's performance on the test set, and it will put the model in evaluation mode, disable gradient calculation, perform forward pass on the test data, calculate predictions, and compare with true labels to calculate accuracy, which will be returned at the end of the evaluation
 # -------------------------
 
-def evaluate(model, loader, device, criterion):
+def evaluate(model, loader, device):
     model.eval()
     correct = 0
     total = 0
-    total_loss = 0
 
     with torch.no_grad():
         for batch in loader:
@@ -64,15 +61,13 @@ def evaluate(model, loader, device, criterion):
             y = batch["label"].to(device)
 
             outputs = model(x)
-            loss = criterion(outputs, y)
-            total_loss += loss.item()
-            
             preds = torch.argmax(outputs, dim=1) # find the index of the maximum value on the ouput matrix along class(column) dimension, which labelizes the predicted class for each sample in the batch
 
             correct += (preds == y).sum().item() # calculate the number of correct predictions by comparing the predicted labels with the true labels, and summing up the number of matches, and add to the total correct count
             total += y.size(0) # total number of samples in the batch
 
-    return correct / total, total_loss / len(loader)
+    return correct / total
+
 
 def save_results(results, config):
     model_type = config["model"]["type"]
@@ -103,12 +98,6 @@ def run_experiment(config):
 
     results = []
 
-    # initialize lists to store average loss and accuracy for all folds before splitting the datasets, which will be used for plotting
-    all_fold_train_losses = []
-    all_fold_test_losses = []
-    all_fold_train_accs = []
-    all_fold_test_accs = []
-
     # -------------------------
     # SPLIT CREATION
     # -------------------------
@@ -138,12 +127,6 @@ def run_experiment(config):
 
     for fold, split in enumerate(splits):
         print(f"\nFold {fold+1}")
-
-        # initialize lists to store average loss and accuracy for this fold, which will be used for plotting
-        train_losses = []
-        test_losses = []
-        train_accs = []
-        test_accs = []
 
         # -------------------------
         # Dataset creation
@@ -234,17 +217,10 @@ def run_experiment(config):
 
         for epoch in range(config["training"]["epochs"]): # loop through epochs defined in config
             loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-            train_acc, _ = evaluate(model, train_loader, device, criterion)
-            test_acc, test_loss = evaluate(model, test_loader, device, criterion)
+            train_acc = evaluate(model, train_loader, device)
+            test_acc = evaluate(model, test_loader, device)
 
             print(f"Epoch {epoch+1}: Loss={loss:.4f}, Train Acc={train_acc:.4f}, Test Acc={test_acc:.4f}")
-
-            # store the average loss and accuracy for this epoch in the lists for this fold, which will be used for plotting
-            train_losses.append(loss)
-            test_losses.append(test_loss)
-            train_accs.append(train_acc)
-            test_accs.append(test_acc)
-            
 
             if test_acc > best_acc: # if current test accuracy is better than the best accuracy seen so far, update best accuracy and save the model checkpoint for this fold
                 best_acc = test_acc
@@ -265,44 +241,10 @@ def run_experiment(config):
             os.path.join(config["paths"]["checkpoints"], f"{model_type}_{protocol}_fold{fold}.pt")
         )
 
-        # store all average loss and accuracy for this fold in the lists for all folds, which will be used for plotting
-        all_fold_train_losses.append(train_losses)
-        all_fold_test_losses.append(test_losses)
-        all_fold_train_accs.append(train_accs)
-        all_fold_test_accs.append(test_accs)
-
         results.append(best_acc)
 
     print("\nFinal Results:", results)
     print("Mean Accuracy:", sum(results) / len(results))
-
-    min_epochs = min(len(f) for f in all_fold_train_losses) # find the minimum number of epochs across all folds to adjust the length of the lists for plotting
-    mean_train_loss = np.mean([f[:min_epochs] for f in all_fold_train_losses], axis=0) 
-    mean_test_loss = np.mean([f[:min_epochs] for f in all_fold_test_losses], axis=0) 
-    mean_train_acc = np.mean([f[:min_epochs] for f in all_fold_train_accs], axis=0) 
-    mean_test_acc = np.mean([f[:min_epochs] for f in all_fold_test_accs], axis=0) 
-
-    # plot mean loss and accuracy curves across folds
-    plt.figure()
-    plt.plot(mean_train_loss, label="Mean Train Loss across folds")
-    plt.plot(mean_test_loss, label="Mean Test Loss across folds")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.title(f"Mean Loss Curve - {model_type} - {protocol}")
-    plt.legend()
-    plt.savefig(os.path.join(config["paths"]["plots"], f"{model_type}_{protocol}_mean_loss_curve.png"))
-    plt.close()
-
-    # plot mean accuracy curves across folds
-    plt.figure()
-    plt.plot(mean_train_acc, label="Mean Train Accuracy across folds")
-    plt.plot(mean_test_acc, label="Mean Test Accuracy across folds")
-    plt.xlabel("Epochs")
-    plt.ylabel("Accuracy")
-    plt.title(f"Mean Accuracy Curve - {model_type} - {protocol}")
-    plt.legend()
-    plt.savefig(os.path.join(config["paths"]["plots"], f"{model_type}_{protocol}_mean_accuracy_curve.png"))
-    plt.close() 
 
     save_results(results, config)
 

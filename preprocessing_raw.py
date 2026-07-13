@@ -35,7 +35,7 @@ def load_mat_file(file_path):
 
     # filter out meta data in mat_data
     eeg_keys = [k for k in mat_data.keys() 
-                if k.startswith("__") and mat_data[k].shape[0] == N_CHANNELS
+                if not k.startswith("__") and mat_data[k].shape[0] == N_CHANNELS
     ]
     
     # sort keys based on trial index
@@ -45,7 +45,7 @@ def load_mat_file(file_path):
 
 #-----step 2Sliding window function to segment EEG data into 4-second windows-----
 
-def sliding_window(singal):
+def sliding_window(signal):
     """
     cut one trial signal into non-overlapping 4-second windows
 
@@ -67,7 +67,7 @@ def sliding_window(singal):
         (N_segments, 62, 800) using np.stack(segments, axis=0)
 
     """
-    total_time = singal.shape[1] # signal.shape: (62, T)
+    total_time = signal.shape[1] # signal.shape: (62, T)
     segments = [] # initiate an empty list to store segments
 
     start = 0
