@@ -6,6 +6,8 @@ import torch
 import copy
 import torch.nn as nn
 import statistics
+import numpy as np
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Subset
 
 from dataset import BiosignalDataset
@@ -54,6 +56,7 @@ def evaluate(model, loader, device):
     model.eval()
     correct = 0
     total = 0
+    total_loss = 0
 
     with torch.no_grad():
         for batch in loader:
@@ -61,12 +64,15 @@ def evaluate(model, loader, device):
             y = batch["label"].to(device)
 
             outputs = model(x)
+            loss = criterion(outputs, y)
+            total_loss += loss.item()
+
             preds = torch.argmax(outputs, dim=1) # find the index of the maximum value on the ouput matrix along class(column) dimension, which labelizes the predicted class for each sample in the batch
 
             correct += (preds == y).sum().item() # calculate the number of correct predictions by comparing the predicted labels with the true labels, and summing up the number of matches, and add to the total correct count
             total += y.size(0) # total number of samples in the batch
 
-    return correct / total
+    return correct / total, total_loss / len(loader)
 
 
 def save_results(results, config):
@@ -97,6 +103,10 @@ def run_experiment(config):
     model_type = config["model"]["type"]
 
     results = []
+    all_fold_train_losses = []
+    all_fold_test_losses = []
+    all_fold_train_accs = []
+    all_fold_test_accs = []
 
     # -------------------------
     # SPLIT CREATION
@@ -127,6 +137,11 @@ def run_experiment(config):
 
     for fold, split in enumerate(splits):
         print(f"\nFold {fold+1}")
+
+        rain_losses = []
+        test_losses = []
+        train_accs = []
+        test_accs = []
 
         # -------------------------
         # Dataset creation
@@ -217,10 +232,15 @@ def run_experiment(config):
 
         for epoch in range(config["training"]["epochs"]): # loop through epochs defined in config
             loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-            train_acc = evaluate(model, train_loader, device)
-            test_acc = evaluate(model, test_loader, device)
+            train_acc, _ = evaluate(model, train_loader, device, criterion)
+            test_acc, test_loss = evaluate(model, test_loader, device, criterion)
 
             print(f"Epoch {epoch+1}: Loss={loss:.4f}, Train Acc={train_acc:.4f}, Test Acc={test_acc:.4f}")
+
+            train_losses.append(loss)
+            test_losses.append(test_loss)
+            train_accs.append(train_acc)
+            test_accs.append(test_acc)
 
             if test_acc > best_acc: # if current test accuracy is better than the best accuracy seen so far, update best accuracy and save the model checkpoint for this fold
                 best_acc = test_acc
@@ -241,10 +261,42 @@ def run_experiment(config):
             os.path.join(config["paths"]["checkpoints"], f"{model_type}_{protocol}_fold{fold}.pt")
         )
 
-        results.append(best_acc)
+        all_fold_train_losses.append(train_losses)
+        all_fold_test_losses.append(test_losses)
+        all_fold_train_accs.append(train_accs)
+        all_fold_test_accs.append(test_accs)
 
+        results.append(best_acc)
+        
     print("\nFinal Results:", results)
     print("Mean Accuracy:", sum(results) / len(results))
+
+    min_epochs = min(len(f) for f in all_fold_train_losses)
+
+    mean_train_loss = np.mean([f[:min_epochs] for f in all_fold_train_losses], axis=0)
+    mean_test_loss = np.mean([f[:min_epochs] for f in all_fold_test_losses], axis=0)
+    mean_train_acc = np.mean([f[:min_epochs] for f in all_fold_train_accs], axis=0)
+    mean_test_acc = np.mean([f[:min_epochs] for f in all_fold_test_accs], axis=0)
+
+    plt.figure()
+    plt.plot(mean_train_loss, label="Mean Train Loss across folds")
+    plt.plot(mean_test_loss, label="Mean Test Loss across folds")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title(f"Mean Loss Curve - {model_type} - {protocol}")
+    plt.legend()
+    plt.savefig(os.path.join(config["paths"]["plots"], f"{model_type}_{protocol}_mean_loss_curve.png"))
+    plt.close()
+
+    plt.figure()
+    plt.plot(mean_train_acc, label="Mean Train Accuracy across folds")
+    plt.plot(mean_test_acc, label="Mean Test Accuracy across folds")
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.title(f"Mean Accuracy Curve - {model_type} - {protocol}")
+    plt.legend()
+    plt.savefig(os.path.join(config["paths"]["plots"], f"{model_type}_{protocol}_mean_accuracy_curve.png"))
+    plt.close()
 
     save_results(results, config)
 

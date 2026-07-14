@@ -77,8 +77,7 @@ class MLPClassifier(nn.Module):
 
         input_dim = (
             config["dataset"]["eeg_channels"]
-            *
-            config["dataset"]["freq_bands"]
+            * config["dataset"]["freq_bands"]
         )
 
         num_classes = config["dataset"]["num_classes"]
@@ -143,6 +142,95 @@ class MLPPlusClassifier(nn.Module):
         return self.net(x)
 
 
+class MLPClassifierRaw(nn.Module):
+    """
+    MLP baseline for raw EEG windows.
+
+    Input:
+        (B, 1, 62, 800)
+
+    Output:
+        (B, 3)
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        input_dim = (
+            config["dataset"]["eeg_channels"]
+            * config["dataset"]["window_size"]
+        )
+        num_classes = config["dataset"]["num_classes"]
+
+        self.net = nn.Sequential(
+            nn.Flatten(),
+
+            nn.Linear(input_dim, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+
+            nn.Linear(128, num_classes)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+class LSTMClassifierRaw(nn.Module):
+    """
+    Input shape:
+        (bs, 1, 62, 800)
+
+    LSTM input shape after reshaping:
+        (bs, 800, 62)
+
+    Output shape:
+        (bs, num_classes), where num_classes=3
+    """
+    def __init__(self, config):
+        super().__init__()
+
+        input_size = config["dataset"]["eeg_channels"]
+        hidden_size = 64
+        num_layers = 1
+        num_classes = config["dataset"]["num_classes"]
+
+        self.lstm = nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=0.0
+        )
+        # bidirectional=True gives hidden_size * 2
+        # mean pooling and max pooling are concatenated, so classifier input is hidden_size * 4
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size * 4, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, num_classes)
+        )
+
+    def forward(self, x):
+        assert x.ndim == 4, f"Expected input shape (B, 1, 62, 800), got {x.shape}"
+
+        x = x.squeeze(1)          # (B, 62, 800)
+        x = x.transpose(1, 2)     # (B, 800, 62)
+
+        out, _ = self.lstm(x)     # (B, 800, hidden_size * 2)
+
+        mean_pool = out.mean(dim=1)       # (B, hidden_size * 2)
+        max_pool, _ = out.max(dim=1)      # (B, hidden_size * 2)
+
+        feat = torch.cat([mean_pool, max_pool], dim=1)   # (B, hidden_size * 4)
+
+        return self.classifier(feat)
+
+
 # get model function to initialize the model based on config    
 def get_model(config):
     mode = config["mode"]
@@ -160,7 +248,7 @@ def get_model(config):
             return CNNModelRaw(config)
         elif model_type == "mlp":
             return MLPClassifierRaw(config)
-        elif model_type == "mlp_plus":
-            return MLPPlusClassifier(config)
+        elif model_type == "lstm":
+            return LSTMClassifierRaw(config)
     
     raise NotImplementedError(f"Model type {model_type} for mode {mode} is not implemented.")

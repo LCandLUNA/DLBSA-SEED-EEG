@@ -7,11 +7,11 @@ def get_config():
         # "de": use DE features(preprocessing.py)
         # "raw": use raw EEG signals(preprocessing_raw.py)
 
-        "mode": "de", # options: "de", "raw"
+        "mode": "raw", # options: "de", "raw"
 
         "paths": {
                 "de": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_seed_4s",
-                "raw": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_seed_raw",
+                "raw": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_raw_data",
 
                 "outputs": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/",
                 "checkpoints": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/checkpoints/",
@@ -30,7 +30,7 @@ def get_config():
         },
 
         "model": {
-            "type": "mlp"      # model change
+            "type": "lstm"      # model change
         },
 
         "training": {
