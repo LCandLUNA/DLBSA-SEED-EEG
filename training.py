@@ -52,7 +52,7 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
 # this function will be called in the training loop after each epoch to evaluate the model's performance on the test set, and it will put the model in evaluation mode, disable gradient calculation, perform forward pass on the test data, calculate predictions, and compare with true labels to calculate accuracy, which will be returned at the end of the evaluation
 # -------------------------
 
-def evaluate(model, loader, device):
+def evaluate(model, loader, device, criterion):
     model.eval()
     correct = 0
     total = 0
@@ -138,7 +138,7 @@ def run_experiment(config):
     for fold, split in enumerate(splits):
         print(f"\nFold {fold+1}")
 
-        rain_losses = []
+        train_losses = []
         test_losses = []
         train_accs = []
         test_accs = []
