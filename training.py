@@ -249,9 +249,9 @@ def run_experiment(config):
             else: 
                 no_improve += 1 # if there is no improvement, add 1 to the no_improve counter
 
-            if no_improve >= patience:
-                print(f"Early stopping at epoch {epoch+1}")
-                break
+            #if no_improve >= patience:
+                #print(f"Early stopping at epoch {epoch+1}")
+                #break
         # -------------------------
         # Save checkpoint
         # -------------------------
