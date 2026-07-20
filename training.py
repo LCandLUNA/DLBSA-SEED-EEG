@@ -78,10 +78,12 @@ def evaluate(model, loader, device, criterion):
 def save_results(results, config):
     model_type = config["model"]["type"]
     protocol = config["evaluation"]["protocol"] # get model type and evaluation protocol from config to distinguish results
-    filename = f"{model_type}_{protocol}_results.json" # distinguish results by model type 
+    mode = config["mode"] # get mode from config to distinguish results
+    filename = f"{mode}_{model_type}_{protocol}_results.json" # distinguish results by model type 
     path = os.path.join(config["paths"]["results"], filename)
     with open(path, "w") as f:
         json.dump({
+            "mode": mode,
             "model": model_type,
             "protocol": protocol,
             "results": results,
@@ -101,6 +103,7 @@ def run_experiment(config):
     device = config["training"]["device"]
     protocol = config["evaluation"]["protocol"]
     model_type = config["model"]["type"]
+    mode = config["mode"]
 
     results = []
     all_fold_train_losses = []
@@ -166,13 +169,14 @@ def run_experiment(config):
             train_size = int(0.8 * total)
             test_size = total - train_size
             train_dataset, test_dataset = torch.utils.data.random_split(
-                full_dataset, [train_size, test_size]
+                full_dataset, [train_size, test_size],
+                generator=torch.Generator().manual_seed(42) # add seed for reproducibility
             )
 
 
 
         else:  # then it's kfold
-            full_dataset_raw = BiosignalDataset(config, subject_ids=None)() 
+            full_dataset_raw = BiosignalDataset(config, subject_ids=None)
 
             train_idx, test_idx = split
 
@@ -227,8 +231,7 @@ def run_experiment(config):
         # -------------------------
         best_acc = 0
         best_state = None
-        patience = 10 # set patience for early stopping
-        no_improve = 0 # counter to track number of epochs without improvement in test accuracy
+        # removed patience for early stopping here
 
         for epoch in range(config["training"]["epochs"]): # loop through epochs defined in config
             loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
@@ -245,20 +248,17 @@ def run_experiment(config):
             if test_acc > best_acc: # if current test accuracy is better than the best accuracy seen so far, update best accuracy and save the model checkpoint for this fold
                 best_acc = test_acc
                 best_state = copy.deepcopy(model.state_dict())
-                no_improve = 0 # if there is improvement, reset the no_improve counter
-            else: 
-                no_improve += 1 # if there is no improvement, add 1 to the no_improve counter
+                # removed early stopping here
+                
 
-            #if no_improve >= patience:
-                #print(f"Early stopping at epoch {epoch+1}")
-                #break
+            final_test_acc = test_acc
         # -------------------------
         # Save checkpoint
         # -------------------------
 
         torch.save(
             best_state,
-            os.path.join(config["paths"]["checkpoints"], f"{model_type}_{protocol}_fold{fold}.pt")
+            os.path.join(config["paths"]["checkpoints"], f"{mode}_{model_type}_{protocol}_fold{fold}.pt")
         )
 
         all_fold_train_losses.append(train_losses)
@@ -266,37 +266,41 @@ def run_experiment(config):
         all_fold_train_accs.append(train_accs)
         all_fold_test_accs.append(test_accs)
 
-        results.append(best_acc)
+        results.append(final_test_acc) # append the final test accuracy for this fold to the results list
         
     print("\nFinal Results:", results)
     print("Mean Accuracy:", sum(results) / len(results))
 
-    min_epochs = min(len(f) for f in all_fold_train_losses)
 
-    mean_train_loss = np.mean([f[:min_epochs] for f in all_fold_train_losses], axis=0)
-    mean_test_loss = np.mean([f[:min_epochs] for f in all_fold_test_losses], axis=0)
-    mean_train_acc = np.mean([f[:min_epochs] for f in all_fold_train_accs], axis=0)
-    mean_test_acc = np.mean([f[:min_epochs] for f in all_fold_test_accs], axis=0)
 
-    plt.figure()
-    plt.plot(mean_train_loss, label="Mean Train Loss across folds")
-    plt.plot(mean_test_loss, label="Mean Test Loss across folds")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.title(f"Mean Loss Curve - {model_type} - {protocol}")
-    plt.legend()
-    plt.savefig(os.path.join(config["paths"]["plots"], f"{model_type}_{protocol}_mean_loss_curve.png"))
-    plt.close()
+# removed early stopping, keeping epochs fixed, and save the best model checkpoint for each fold, and save the results to a json file at the end of all folds
+    train_loss_arr = np.array(all_fold_train_losses)
+    test_loss_arr  = np.array(all_fold_test_losses)
+    train_acc_arr  = np.array(all_fold_train_accs)
+    test_acc_arr   = np.array(all_fold_test_accs)
 
-    plt.figure()
-    plt.plot(mean_train_acc, label="Mean Train Accuracy across folds")
-    plt.plot(mean_test_acc, label="Mean Test Accuracy across folds")
-    plt.xlabel("Epochs")
-    plt.ylabel("Accuracy")
-    plt.title(f"Mean Accuracy Curve - {model_type} - {protocol}")
-    plt.legend()
-    plt.savefig(os.path.join(config["paths"]["plots"], f"{model_type}_{protocol}_mean_accuracy_curve.png"))
-    plt.close()
+    epochs_axis = np.arange(1, train_loss_arr.shape[1] + 1)
+
+    def mean_std_plot(arr_train, arr_test, ylabel, fname):
+        m_tr, s_tr = arr_train.mean(axis=0), arr_train.std(axis=0)
+        m_te, s_te = arr_test.mean(axis=0),  arr_test.std(axis=0)
+
+        plt.figure()
+        plt.plot(epochs_axis, m_tr, label=f"Mean Train {ylabel} across folds")
+        plt.fill_between(epochs_axis, m_tr - s_tr, m_tr + s_tr, alpha=0.2)
+        plt.plot(epochs_axis, m_te, label=f"Mean Test {ylabel} across folds")
+        plt.fill_between(epochs_axis, m_te - s_te, m_te + s_te, alpha=0.2)
+        plt.xlabel("Epochs")
+        plt.ylabel(ylabel)
+        plt.title(f"Mean {ylabel} (±std) - {mode} - {model_type} - {protocol}")
+        plt.legend()
+        plt.savefig(os.path.join(config["paths"]["plots"], fname))
+        plt.close()
+
+    mean_std_plot(train_loss_arr, test_loss_arr, "Loss",
+                  f"{mode}_{model_type}_{protocol}_mean_loss_curve.png")
+    mean_std_plot(train_acc_arr, test_acc_arr, "Accuracy",
+                  f"{mode}_{model_type}_{protocol}_mean_accuracy_curve.png")
 
     save_results(results, config)
 

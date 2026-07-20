@@ -3,20 +3,19 @@
 def get_config():
     config = {
         "raw_data": "/home/space/datasets/bsa03/SEED/Preprocessed_EEG",
- 
+        
         # "de": use DE features(preprocessing.py)
         # "raw": use raw EEG signals(preprocessing_raw.py)
 
         "mode": "raw", # options: "de", "raw"
 
         "paths": {
-                "de": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_seed_4s",
-                "raw": "/home/bsa06/projects/DLBSA-SEED-EEG/processed_raw_data",
-
-                "outputs": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/",
-                "checkpoints": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/checkpoints/",
-                "results": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/results/",
-                "plots": "/home/bsa06/projects/DLBSA-SEED-EEG/outputs/plots/"
+            "de": "/home/cliu/projects/DLBSA-SEED-EEG/processed_seed_4s",
+            "raw": "/home/cliu/DLBSA-SEED-EEG/processed_seed_raw",
+            "outputs": "/home/cliu/DLBSA-SEED-EEG/outputs/",
+            "checkpoints": "/home/cliu/DLBSA-SEED-EEG/outputs/checkpoints/",
+            "results": "/home/cliu/DLBSA-SEED-EEG/outputs/results/",
+            "plots": "/home/cliu/DLBSA-SEED-EEG/outputs/plots/"
         },
 
         "dataset": {
@@ -30,12 +29,12 @@ def get_config():
         },
 
         "model": {
-            "type": "lstm"      # model change
+            "type": "cnn"      # model change
         },
 
         "training": {
-            "batch_size": 32,
-            "epochs": 80,
+            "batch_size": 128,
+            "epochs": 130,
             "learning_rate": 1e-3,
             "optimizer": "adamw",  # optimizer change
             "weight_decay": 1e-4,
@@ -43,7 +42,7 @@ def get_config():
         },
 
         "evaluation": {
-            "protocol": "subject_dependent",  # options: "loso", "lmso", "kfold", "subject_dependent"
+            "protocol": "loso",  # options: "loso", "lmso", "kfold", "subject_dependent"
             "num_folds": 5
         }
     }
