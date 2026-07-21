@@ -197,13 +197,19 @@ def run_experiment(config):
         train_loader = DataLoader(
             train_dataset,
             batch_size=config["training"]["batch_size"],
-            shuffle=True
+            shuffle=True,
+            num_workers=8, # set number of worker processes for data loading, which can speed up data loading by using multiple CPU cores, and set pin_memory to True to speed up transfer of data to GPU memory, and set persistent_workers to True to keep workers alive between epochs for faster data loading
+            pin_memory=True,
+            persistent_workers=True
         )
 
         test_loader = DataLoader(
             test_dataset,
             batch_size=config["training"]["batch_size"],
-            shuffle=False
+            shuffle=False,
+            num_workers=8,
+            pin_memory=True,
+            persistent_workers=True
         )
 
         # -------------------------
@@ -225,6 +231,7 @@ def run_experiment(config):
             )
 
         criterion = nn.CrossEntropyLoss() # define loss function for multi-class classification, which is appropriate for our 3-class
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["training"]["epochs"]) # define learning rate scheduler to adjust learning rate during training, which can help improve convergence and performance
 
         # -------------------------
         # Training
@@ -244,6 +251,7 @@ def run_experiment(config):
             test_losses.append(test_loss)
             train_accs.append(train_acc)
             test_accs.append(test_acc)
+            scheduler.step() # update learning rate based on scheduler
 
             if test_acc > best_acc: # if current test accuracy is better than the best accuracy seen so far, update best accuracy and save the model checkpoint for this fold
                 best_acc = test_acc
