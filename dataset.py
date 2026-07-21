@@ -65,9 +65,29 @@ class BiosignalDataset(Dataset): # class inherit from torch.utils.data.Dataset
         self.mean = mean
         self.std = std
 
-        if self.mean is not None and self.std is not None:
-            self.signals = (self.signals - self.mean) / (self.std + 1e-8) # incase std is zero, add small value to avoid division by zero
-        
+        # add subject-wise normalization switch
+        subject_wise = config.get("subject_wise_norm", False)
+
+        if subject_wise:
+            # for each subject, use the mean and std of that subject's data for normalization
+            self._apply_subject_wise_norm()
+        elif self.mean is not None and self.std is not None:
+            # normalize using provided mean and std
+            self.signals = (self.signals - self.mean) / self.std  
+
+    def _apply_subject_wise_norm(self):
+        """subject-wise z-score normalization:
+        for each subject, compute mean and std of that subject's data, and normalize that subject's data accordingly.
+        In this way, each subject's data is normalized independently, which can help reduce cross-subject variability.
+        """
+        subject_ids_arr = np.array(self.subject_ids)  # (total_samples,)
+        for sid in np.unique(subject_ids_arr):  # loop through unique subject_ids
+            subject_mask = (subject_ids_arr == sid)  # boolean mask for this subject's samples
+            subject_signals = self.signals[subject_mask]  # get this subject's signals, shape (num_samples_subject, 62, 5)
+            mean = subject_signals.mean(axis=0)  # compute mean for this subject, shape (62, 5)
+            std = subject_signals.std(axis=0)  # compute std for this subject, shape (62, 5)
+            self.signals[subject_mask] = (subject_signals - mean) / std  # normalize this subject's signals
+
     def compute_stats(self): # compute mean and std for normalization, return as numpy arrays with shape (62, 5)
         mean = self.signals.mean(axis=0) # (62,5)
         std = self.signals.std(axis=0) # (62,5)

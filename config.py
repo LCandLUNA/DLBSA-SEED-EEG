@@ -7,16 +7,18 @@ def get_config():
         # "de": use DE features(preprocessing.py)
         # "raw": use raw EEG signals(preprocessing_raw.py)
 
-        "mode": "raw", # options: "de", "raw"
+        "mode": "de", # options: "de", "raw"
 
         "paths": {
-            "de": "/home/cliu/projects/DLBSA-SEED-EEG/processed_seed_4s",
+            "de": "/home/cliu/processed_seed_4s",
             "raw": "/home/cliu/DLBSA-SEED-EEG/processed_seed_raw",
             "outputs": "/home/cliu/DLBSA-SEED-EEG/outputs/",
             "checkpoints": "/home/cliu/DLBSA-SEED-EEG/outputs/checkpoints/",
             "results": "/home/cliu/DLBSA-SEED-EEG/outputs/results/",
             "plots": "/home/cliu/DLBSA-SEED-EEG/outputs/plots/"
         },
+
+        "subject_wise_norm": True,
 
         "dataset": {
             "name": "SEED",
@@ -29,7 +31,7 @@ def get_config():
         },
 
         "model": {
-            "type": "cnn"      # model change
+            "type": "dgcnn"      # model change
         },
 
         "training": {
