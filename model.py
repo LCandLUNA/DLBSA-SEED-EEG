@@ -420,55 +420,124 @@ class MLPClassifierRaw(nn.Module):
         return self.net(x)
 
 class LSTMClassifierRaw(nn.Module):
-    """
-    Input shape:
-        (bs, 1, 62, 800)
-
-    LSTM input shape after reshaping:
-        (bs, 800, 62)
-
-    Output shape:
-        (bs, num_classes), where num_classes=3
-    """
     def __init__(self, config):
         super().__init__()
 
-        input_size = config["dataset"]["eeg_channels"]
-        hidden_size = 64
-        num_layers = 1
+        input_size = config["dataset"]["eeg_channels"]      # 62
+        hidden_size = 32
         num_classes = config["dataset"]["num_classes"]
+        dropout = 0.5
 
         self.lstm = nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
-            num_layers=num_layers,
+            num_layers=1,
             batch_first=True,
             bidirectional=True,
             dropout=0.0
         )
-        # bidirectional=True gives hidden_size * 2
-        # mean pooling and max pooling are concatenated, so classifier input is hidden_size * 4
+
         self.classifier = nn.Sequential(
-            nn.Linear(hidden_size * 4, 128),
+            nn.Linear(hidden_size * 2, 64),
             nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, num_classes)
+            nn.Dropout(dropout),
+            nn.Linear(64, num_classes)
         )
 
     def forward(self, x):
-        assert x.ndim == 4, f"Expected input shape (B, 1, 62, 800), got {x.shape}"
-
         x = x.squeeze(1)          # (B, 62, 800)
         x = x.transpose(1, 2)     # (B, 800, 62)
 
         out, _ = self.lstm(x)     # (B, 800, hidden_size * 2)
 
-        mean_pool = out.mean(dim=1)       # (B, hidden_size * 2)
-        max_pool, _ = out.max(dim=1)      # (B, hidden_size * 2)
-
-        feat = torch.cat([mean_pool, max_pool], dim=1)   # (B, hidden_size * 4)
+        feat = out.mean(dim=1)    # (B, hidden_size * 2)
 
         return self.classifier(feat)
+        
+
+class CNNLSTMClassifierRaw(nn.Module):
+    """
+    CNN + LSTM model for raw EEG emotion recognition.
+
+    Input shape:
+        (B, 1, 62, 800)
+
+    Output shape:
+        (B, num_classes)
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        eeg_channels = config["dataset"]["eeg_channels"]      # 62
+        num_classes = config["dataset"]["num_classes"]        # 3
+
+        cnn_out_channels = 32
+        hidden_size = 32
+        dropout = 0.5
+
+        self.temporal_cnn = nn.Sequential(
+            nn.Conv1d(
+                in_channels=eeg_channels,
+                out_channels=cnn_out_channels,
+                kernel_size=7,
+                padding=3
+            ),
+            nn.BatchNorm1d(cnn_out_channels),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.AvgPool1d(kernel_size=2),   # 800 -> 400
+
+            nn.Conv1d(
+                in_channels=cnn_out_channels,
+                out_channels=cnn_out_channels,
+                kernel_size=5,
+                padding=2
+            ),
+            nn.BatchNorm1d(cnn_out_channels),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.AvgPool1d(kernel_size=2)    # 400 -> 200
+        )
+
+        self.lstm = nn.LSTM(
+            input_size=cnn_out_channels,
+            hidden_size=hidden_size,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+            dropout=0.0
+        )
+
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size * 2, 64),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(64, num_classes)
+        )
+
+    def forward(self, x):
+        """
+        Forward pass.
+
+        x:
+            (B, 1, 62, 800)
+        """
+
+        assert x.ndim == 4, f"Expected input shape (B, 1, 62, 800), got {x.shape}"
+
+        x = x.squeeze(1)             # (B, 62, 800)
+
+        x = self.temporal_cnn(x)     # (B, 32, 200)
+
+        x = x.transpose(1, 2)        # (B, 200, 32)
+
+        out, _ = self.lstm(x)        # (B, 200, hidden_size * 2)
+
+        feat = out.mean(dim=1)       # (B, hidden_size * 2)
+
+        return self.classifier(feat)
+
 
 
 # get model function to initialize the model based on config    
@@ -494,5 +563,7 @@ def get_model(config):
             return MLPClassifierRaw(config)
         elif model_type == "lstm":
             return LSTMClassifierRaw(config)
+        elif model_type == "cnn_lstm":
+            return CNNLSTMClassifierRaw(config)
     
     raise NotImplementedError(f"Model type {model_type} for mode {mode} is not implemented.")
