@@ -1,162 +1,134 @@
-# DL-BSA Project – SEED EEG Emotion Recognition 
+# DL-BSA Project: SEED EEG Emotion Recognition
 
-This project explores EEG-based emotion recognition using the SEED dataset. The goal is to classify emotional states into three categories:
-- Positive
-- Neutral
-- Negative
+This repository implements an EEG-based emotion recognition pipeline for the SEED dataset. It supports three-class classification of emotions using either raw EEG signals or Differential Entropy (DE) features, with training and evaluation workflows built around deep learning models.
 
----
+## Overview
 
-## Project Pipeline
+The project includes:
 
-```text
-Dataset
-(SEED)
-    ↓
-Preprocessing
-(STFT + DE Features)
-    ↓
-Feature Dataset
-(.npy files)
-    ↓
-Model Training
-(CNN / MLP / TBD)
-    ↓
-Emotion Classification
-(Positive / Neutral / Negative)
-    ↓
-Evaluation
-(LOSO / LMSO)
+- preprocessing pipelines for DE features and raw EEG signals
+- dataset loading and subject-wise splitting
+- training of multiple EEG classification models
+- checkpoint-based evaluation with macro F1, weighted F1, per-class F1, and confusion matrices
+- learning curve generation for loss and accuracy
+- SHAP-based interpretability analysis for model explanation
+
+## Project structure
+
+- [main.py](main.py): entry point for running the training workflow
+- [config.py](config.py): experiment configuration, including dataset paths, model choice, and evaluation protocol
+- [preprocessing.py](preprocessing.py): DE feature extraction pipeline
+- [preprocessing_raw.py](preprocessing_raw.py): raw EEG preprocessing pipeline
+- [dataset.py](dataset.py): dataset loader for processed EEG samples
+- [model.py](model.py): model definitions for CNN, CNN-1D, MLP, MLP-plus, LSTM, CNN-LSTM, DGCNN, and DANN-based variants
+- [training.py](training.py): training loop, checkpoint saving, and learning curve generation
+- [evaluation.py](evaluation.py): checkpoint-based evaluation with F1 metrics and confusion matrices
+- [shap_analysis_de.py](shap_analysis_de.py): SHAP analysis for DE-feature models
+- [shap_analysis_raw.py](shap_analysis_raw.py): SHAP analysis for raw-signal models
+- [utils.py](utils.py): helper functions for subject IDs, splits, and leakage checks
+- [submit_train.sh](submit_train.sh): SLURM job script for training on the Hydra cluster
+- [submit_eval.sh](submit_eval.sh): SLURM job script for evaluation on the Hydra cluster
+- [submit_preprocess.sh](submit_preprocess.sh): SLURM job script for preprocessing on the Hydra cluster
+
+## Dataset and labels
+
+This project is built for the SEED dataset with the following setup:
+
+- 62 EEG channels
+- 3 emotion classes
+- 200 Hz sampling rate
+- 4-second EEG windows
+
+Label mapping used by the code:
+
+- 0: Negative
+- 1: Neutral
+- 2: Positive
+
+## Quick start
+
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
 ```
 
----
+### 2. Configure the experiment
 
-## Workflow
+Edit [config.py](config.py) to choose:
 
-1. `preprocessing.py`  
-   Generate Differential Entropy (DE) features from SEED EEG recordings.
-   Current preprocessing steps:
-   - Short-Time Fourier Transform (STFT)
-   - Frequency band decomposition
-   - Differential Entropy (DE) feature extraction
-   - Temporal smoothing
-   - Z-score normalization
+- mode: "de" or "raw"
+- model type: for example, "cnn", "cnn1d", "mlp", "mlp_plus", "lstm", "cnn_lstm", "dgcnn", or "dann_cnn_lstm"
+- evaluation protocol: currently the main evaluation workflow uses "loso" and "subject_dependent"
 
-2. `dataset.py`  
-   Load processed data and return samples.
+### 3. Run preprocessing
 
-3. `models.py`  
-   Define your model.
+For DE features:
 
-4. `training.py`  
-   Train and evaluate the model.
+```bash
+python preprocessing.py
+```
 
-Run everything with:
+For raw EEG signals:
+
+```bash
+python preprocessing_raw.py
+```
+
+### 4. Train the model
 
 ```bash
 python main.py
 ```
 
----
+### 5. Evaluate checkpoints
 
-## Dataset
-
-**Dataset:** SEED (SJTU Emotion EEG Dataset)
-
-- 15 subjects
-- 45 recording sessions
-- 62 EEG channels
-- Sampling rate: 200 Hz
-- 3 emotion classes
-
-### Label Mapping
-
-| Emotion | Label |
-|----------|--------|
-| Negative | 0 |
-| Neutral | 1 |
-| Positive | 2 |
-
-The project uses the official `Preprocessed_EEG` release of the SEED dataset.
-
----
-
-## Preprocessing
-
-The preprocessing pipeline includes:
-
-- Short-Time Fourier Transform (STFT)
-- Five-band frequency decomposition
-  - Delta (1–3 Hz)
-  - Theta (4–7 Hz)
-  - Alpha (8–13 Hz)
-  - Beta (14–30 Hz)
-  - Gamma (31–50 Hz)
-- Differential Entropy (DE) feature extraction
-- Moving-average temporal smoothing
-- Z-score normalization
-
----
-
-## Output Format
-
-Each processed sample is stored as:
-
-```python
-{
-    "signals": ndarray,
-    "labels": ndarray,
-    "subject_id": str
-}
+```bash
+python evaluation.py
 ```
 
-Feature shape:
+### 6. Run SHAP analysis (optional)
 
-```python
-signals.shape = (N, 62, 5)
+For DE-feature models:
+
+```bash
+python shap_analysis_de.py
 ```
 
-where:
+For raw-signal models:
 
-- `N` = number of EEG segments
-- `62` = EEG channels
-- `5` = frequency bands
+```bash
+python shap_analysis_raw.py
+```
 
----
+## Running on the Hydra cluster
 
-## Model
+This project is designed to run on the Hydra cluster using SLURM job scripts.
 
-You must implement your own model in `models.py`.
+Typical commands:
 
-Requirements:
-- input: `(B, C, T)` (or your adapted format)  
-- output: task-dependent  
+```bash
+sbatch submit_preprocess.sh
+sbatch submit_train.sh
+sbatch submit_eval.sh
+```
 
----
+These scripts launch preprocessing, training, and evaluation jobs with the required resources and write logs under the logs directory.
 
-## Training
+## Default configuration
 
-The provided `training.py` assumes a **classification task**:
-- loss: CrossEntropyLoss  
-- metric: accuracy  
+The repository currently defaults to:
 
-If your task is different (e.g., regression or segmentation), you must modify:
-- loss function  
-- model output  
-- evaluation metric  
+- raw EEG input
+- LOSO evaluation
+- AdamW optimizer
+- 130 training epochs
+- CUDA when available, otherwise CPU
 
----
+## Outputs
 
-## Evaluation
+Training and evaluation artifacts are written to:
 
-Supported protocols:
-- LOSO (Leave-One-Subject-Out)  
-- LMSO (Leave-Multiple-Subjects-Out)  
-
-Subject-based splits are recommended for biomedical data.
-
----
-
-## References
-
-- W.-L. Zheng and B.-L. Lu, “Investigating critical frequency bands and channels for eeg-based emo tion recognition with deep neural networks”, IEEE Transactions on Autonomous Mental Development, vol. 7, no. 3, pp. 16
+- outputs/checkpoints/: model checkpoints
+- outputs/results/: JSON result files with per-fold accuracies, mean accuracy, and standard deviation
+- outputs/plots/: learning curves, confusion matrices, and SHAP interpretability plots
